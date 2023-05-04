@@ -20,7 +20,7 @@ O que esperamos?
 
 
 
-item 2 (etl_dag):
+item 2 (dag_etl.py):
 
 1. Realizar a importação dos dados dos 3 arquivos em uma tabela criada por você no banco de dados de sua escolha;
 					
