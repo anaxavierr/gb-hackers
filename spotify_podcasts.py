@@ -19,7 +19,7 @@ default_args = {
 }
 
 dag = DAG(
-    dag_id='spotify_gb',
+    dag_id='spotify_gbdh',
     default_args=default_args,
     schedule_interval='@daily',
     catchup=False
@@ -106,9 +106,6 @@ search_spotify_task = PythonOperator(
     python_callable=search_spotify_podcasts,
     op_kwargs={'query': 'data hackers'}
 )
-
-
-
 
 
 
@@ -203,16 +200,28 @@ def get_datahackers_episodes():
     # Salva o DataFrame em um arquivo CSV.
     df_all_episodes.to_csv('datahackers_all_episodes.csv', index=False)
 
+    # Convertendo o DataFrame para um objeto JSON serializável
+    json_data = df_all_episodes.to_dict(orient='records')
+
     # Filtra o DataFrame para selecionar apenas os episódios que contêm a string 'Grupo Boticário' na descrição.
     df_filtered = df_all_episodes[df_all_episodes['description'].str.contains('Grupo Boticário', case=False)]
     # Salva o DataFrame filtrado em um arquivo CSV.
     df_filtered.to_csv('datahackers_episodes_groupo_boticario.csv', index=False)
     df_filtered = df_all_episodes[df_all_episodes['description'].str.contains('Grupo Boticário', case=False)]
-    return df_all_episodes, auth_response.json()
 
+    json_data = df_filtered.to_dict(orient='records')
+
+    # Exportando o DataFrame para um arquivo CSV
+    df_all_episodes.to_csv('podcasts.csv', index=False)
+
+    # Convertendo o DataFrame para um objeto JSON serializável
+    json_data = df_all_episodes.to_dict(orient='records')
+
+    # Retornando o DataFrame com os dados dos podcasts
+    return json_data
 
 # Uso da função
-df_all_episodes, df_grupo_boticario = get_datahackers_episodes()
+#df_all_episodes, df_filtered = get_datahackers_episodes()
 
 
 get_datahackers_task = PythonOperator(
@@ -226,7 +235,7 @@ create_dataset_task = BigQueryCreateEmptyDatasetOperator(
     task_id='create_dataset',
     dag=dag,
     dataset_id='spotify_podcasts',
-    project_id='your_project_id'
+    project_id='gb-project-385603'
 )
 
 
@@ -235,7 +244,7 @@ create_table_task = BigQueryCreateEmptyTableOperator(
     dag=dag,
     table_id='podcasts',
     dataset_id='spotify_podcasts',
-    project_id='your_project_id',
+    project_id='gb-project-385603',
     schema_fields=[
         {'name': 'name', 'type': 'STRING', 'mode': 'REQUIRED'},
         {'name': 'description', 'type': 'STRING', 'mode': 'REQUIRED'},
@@ -251,13 +260,14 @@ create_table_task = BigQueryCreateEmptyTableOperator(
 def insert_data(**kwargs):
     # Função para inserir os dados obtidos na API do Spotify no BigQuery
 
-    # Obtendo o DataFrame com os dados dos podcasts
-    df = kwargs['task_instance'].xcom_pull(task_ids='search_spotify_podcasts')
+    # Obtendo a lista com os dados dos podcasts
+    rows = kwargs['task_instance'].xcom_pull(task_ids='search_spotify_podcasts')
 
-    if df.empty:
+    if len(rows) == 0:
         return
 
-    # Transformando os dados do DataFrame para o formato adequado
+    # Transformando os dados da lista para o formato adequado
+    df = pd.DataFrame(rows)
     df['total_episodes'] = df['total_episodes'].astype('int64')
 
     # Preparando os dados para a inserção no BigQuery
@@ -271,11 +281,11 @@ def insert_data(**kwargs):
     insert_job = BigQueryInsertJobOperator(
         task_id='insert_data',
         sql=insert_query,
-    parameters=rows,
-    bigquery_conn_id='bigquery_default',
-    use_legacy_sql=False,
-    dag=dag,
-)
+        parameters=rows,
+        bigquery_conn_id='bigquery_default',
+        use_legacy_sql=False,
+        dag=dag,
+    )
     insert_job.execute(context=kwargs)
 
 insert_data_task = PythonOperator(
@@ -283,6 +293,7 @@ task_id='insert_data',
 dag=dag,
 python_callable=insert_data,
 provide_context=True,
+
 )
 
 search_spotify_task >> get_datahackers_task >> create_dataset_task >> create_table_task >> insert_data_task
