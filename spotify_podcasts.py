@@ -61,7 +61,7 @@ def search_spotify_podcasts(query):
     # Realizando a requisição à API do Spotify e obtendo os resultados
     response = requests.get(base_url, headers=headers, params=params)
     data = response.json()
-    items = data.get('shows', {}).get('items', [])
+    items = data.get('items') or []
 
     # Criando uma lista para armazenar os dados de cada podcast e iterando sobre os resultados
     table = []
@@ -285,7 +285,7 @@ def insert_data(**kwargs):
     execute_query = BigQueryExecuteQueryOperator(
         task_id='execute_query',
         sql=insert_query,
-        bigquery_conn_id='bigquery_default',
+        #bigquery_conn_id='google_cloud_default',
         use_legacy_sql=False,
         dag=dag,
     )
