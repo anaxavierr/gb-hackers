@@ -19,7 +19,7 @@ default_args = {
 }
 
 dag = DAG(
-    dag_id='spotify_podcasts',
+    dag_id='spotify_gb',
     default_args=default_args,
     schedule_interval='@daily',
     catchup=False
@@ -87,11 +87,14 @@ def search_spotify_podcasts(query):
     df = pd.DataFrame(table, columns=['name', 'description', 'id', 'total_episodes'])
     df.to_csv('podcasts.csv', index=False)
 
+    # Convertendo o DataFrame para um objeto JSON serializável
+    json_data = df.to_dict(orient='records')
+
     # Exportando o DataFrame para um arquivo CSV
     df.to_csv(csv_filename, index=False)
 
     # Retornando o DataFrame com os dados dos podcasts
-    return df
+    return json_data
 
 # Uso da função de busca de podcasts do Spotify
 podcast_df = search_spotify_podcasts('data hackers')
