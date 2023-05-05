@@ -4,6 +4,7 @@ from airflow import DAG
 from airflow.providers.google.cloud.operators.bigquery import (
     BigQueryCreateEmptyDatasetOperator,
     BigQueryCreateEmptyTableOperator,
+    BigQueryExecuteQueryOperator,
     BigQueryInsertJobOperator
 )
 from airflow.operators.python import PythonOperator
@@ -270,30 +271,31 @@ def insert_data(**kwargs):
     df = pd.DataFrame(rows)
     df['total_episodes'] = df['total_episodes'].astype('int64')
 
-    # Preparando os dados para a inserção no BigQuery
-    rows = df.to_dict(orient='records')
-
-    # Executando a inserção no BigQuery
+    # Gerando a consulta SQL para a inserção dos dados na tabela de podcasts
     insert_query = f"""
         INSERT INTO `spotify_podcasts.podcasts` (name, description, id, total_episodes)
-        VALUES (@name, @description, @id, @total_episodes)
+        VALUES
     """
-    insert_job = BigQueryInsertJobOperator(
-        task_id='insert_data',
+    values = []
+    for row in rows:
+        values.append(f"('{row['name']}', '{row['description']}', '{row['id']}', {row['total_episodes']})")
+    insert_query += ",\n".join(values)
+
+    # Executando a consulta no BigQuery
+    execute_query = BigQueryExecuteQueryOperator(
+        task_id='execute_query',
         sql=insert_query,
-        parameters=rows,
         bigquery_conn_id='bigquery_default',
         use_legacy_sql=False,
         dag=dag,
     )
-    insert_job.execute(context=kwargs)
+    execute_query.execute(context=kwargs)
 
 insert_data_task = PythonOperator(
-task_id='insert_data',
-dag=dag,
-python_callable=insert_data,
-provide_context=True,
-
+    task_id='insert_data',
+    dag=dag,
+    python_callable=insert_data,
+    provide_context=True,
 )
 
 search_spotify_task >> get_datahackers_task >> create_dataset_task >> create_table_task >> insert_data_task
